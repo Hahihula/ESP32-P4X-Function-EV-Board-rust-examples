@@ -6,8 +6,9 @@
 //! (`esp-bsp/bsp/esp32_p4_function_ev_board`) and the board user guide:
 //! <https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32p4/esp32-p4x-function-ev-board/user_guide.html>
 //!
-//! The hardware-independent modules ([`level`]) touch no peripheral and read
-//! no clock, so they also build for a PC, where they are unit-tested:
+//! The hardware-independent modules ([`level`], and [`touch`], which is
+//! generic over `embedded-hal-async`) touch no peripheral and read no clock,
+//! so they also build for a PC, where they are unit-tested:
 //! `cargo test -p esp32-p4-function-ev --lib --target <host triple>`. The
 //! drivers build only for the ESP32-P4.
 
@@ -15,6 +16,7 @@
 
 // Hardware-independent, tested on the host.
 pub mod level;
+pub mod touch;
 
 // Drivers.
 #[cfg(target_arch = "riscv32")]

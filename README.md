@@ -53,6 +53,7 @@ ESP32-P4.
 | `esp32-p4-function-ev/src/board.rs` | Board pin map, I2C device addresses, `init()`, logger, console wait, PSRAM heap, shared I2C bus, BOOT button |
 | `esp32-p4-function-ev/src/audio.rs` | I2S input stream from the ES8311 (DMA ring buffer that restarts itself after an overflow), ES8311 driver from `oxstack-drivers` |
 | `esp32-p4-function-ev/src/display.rs` | 7" LCD: EK79007 panel init over MIPI-DSI, triple-buffered video from PSRAM, `embedded-graphics` drawing target, backlight |
+| `esp32-p4-function-ev/src/touch.rs` | GT911 touch controller: polled async driver over the shared I2C bus, address detection, up to five fingers, orientation (host-tested) |
 | `esp32-p4-function-ev/src/level.rs` | RMS and peak levels in dBFS, text level bar (host-tested) |
 | `examples/src/demo.rs` | Start-up macro shared by the demos |
 
@@ -184,6 +185,42 @@ the CPU. Two things in it shape `display.rs`:
 
 The backlight is on or off only: esp-hal has no PWM driver (LEDC or MCPWM) for the
 ESP32-P4 yet.
+
+### 03 – Touch
+
+```bash
+cargo run --release --bin 03_touch
+```
+
+Finger painting on the LCD (connected as for demo 02): every finger, up to five at once,
+draws a line in its own colour. **BOOT** clears the canvas. Fingers touching down and
+lifting are logged:
+
+```text
+INFO - GT911 at 0x5D: product ID 911, firmware 1060, 1024x600
+INFO - Draw with up to 5 fingers; press BOOT to clear
+INFO - Finger 0 down at (370, 228)
+INFO - Finger 0 up at (447, 123)
+```
+
+The GT911's INT and RESET pins are not wired to the ESP32-P4, so the driver polls it, here
+once per frame. Without the reset sequence the GT911 keeps whichever address it chose at
+power-up, 0x5D or 0x14; `Gt911::find` tries both.
+
+The touch panel is mounted rotated by 180° relative to the display: the GT911 reports
+(0, 0) at the bottom right corner of the picture. `touch::LCD_ORIENTATION` flips both axes:
+
+```rust
+let (touch, info) = Gt911::find(i2c).await?;
+let mut touch = touch.with_orientation(touch::LCD_ORIENTATION);
+if let Some(touches) = touch.read().await? {
+    for t in touches.iter() { /* t.id, t.x, t.y */ }
+}
+```
+
+Each frame is drawn into the oldest of the three frame buffers, so the demo keeps the
+strokes of the last three frames and paints all of them into every back buffer. That way
+each buffer gets every stroke it missed.
 
 ## License
 

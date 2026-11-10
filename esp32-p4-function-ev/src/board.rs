@@ -34,9 +34,9 @@ pub mod i2c_addr {
     /// GT911 capacitive touch controller on the 7" LCD, at its default
     /// address. The GT911 picks 0x5D or 0x14 at reset, depending on its INT
     /// pin level.
-    pub const GT911: u8 = 0x5D;
+    pub const GT911: u8 = crate::touch::ADDRESSES[0];
     /// The other address the GT911 can come up at.
-    pub const GT911_ALT: u8 = 0x14;
+    pub const GT911_ALT: u8 = crate::touch::ADDRESSES[1];
 }
 
 /// Initialises the HAL with the maximum CPU clock (400 MHz on chip
