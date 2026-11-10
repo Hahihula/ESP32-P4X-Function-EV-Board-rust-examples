@@ -1,0 +1,30 @@
+[package]
+name         = "esp32-p4-function-ev"
+description  = "Board support for the ESP32-P4X-Function-EV-Board: pins, PSRAM, audio, microSD, Ethernet, 7\" MIPI-DSI LCD and touch"
+edition.workspace      = true
+rust-version.workspace = true
+version.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+readme       = "../README.md"
+keywords     = ["esp32", "esp32p4", "embedded", "no-std", "board-support"]
+categories   = ["embedded", "no-std", "hardware-support"]
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# `board::init_logger()`: log through esp-println. Off by default so a
+# firmware picks its own console and logger.
+log = ["dep:esp-println"]
+
+# Always built: the hardware-independent modules, which are unit-tested on a
+# PC: `cargo test -p esp32-p4-function-ev --lib --target <host triple>`.
+[dependencies]
+embassy-time = { workspace = true }
+
+# The drivers, only for the ESP32-P4.
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+esp-hal     = { workspace = true }
+esp-println = { workspace = true, optional = true }

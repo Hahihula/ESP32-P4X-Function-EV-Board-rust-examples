@@ -1,0 +1,27 @@
+[package]
+name         = "esp32-p4-function-ev-examples"
+description  = "Demos for the ESP32-P4X-Function-EV-Board, built on the esp32-p4-function-ev library"
+edition.workspace      = true
+rust-version.workspace = true
+version.workspace      = true
+license.workspace      = true
+repository.workspace   = true
+publish      = false
+
+[lints]
+workspace = true
+
+# The demos and their helpers build for the ESP32-P4. Hardware-independent
+# modules also build for a PC, where they are unit-tested:
+#   cargo test -p esp32-p4-function-ev-examples --lib --target <host triple>
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+esp32-p4-function-ev   = { workspace = true, features = ["log"] }
+esp-hal                = { workspace = true }
+esp-rtos               = { workspace = true }
+esp-bootloader-esp-idf = { workspace = true }
+esp-alloc              = { workspace = true }
+esp-backtrace          = { workspace = true }
+esp-println            = { workspace = true }
+log                    = { workspace = true }
+embassy-executor       = { workspace = true }
+embassy-time           = { workspace = true }

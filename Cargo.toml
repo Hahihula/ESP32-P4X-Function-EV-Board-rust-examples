@@ -1,0 +1,48 @@
+[workspace]
+resolver = "2"
+members  = ["esp32-p4-function-ev", "examples"]
+
+[workspace.package]
+edition      = "2024"
+rust-version = "1.95"
+version      = "0.1.0"
+license      = "MIT OR Apache-2.0"
+repository   = "https://github.com/Hahihula/p4-rust-examples"
+
+# Lints for every crate (`[lints] workspace = true`).
+[workspace.lints.rust]
+missing_docs           = "warn"
+unsafe_op_in_unsafe_fn = "deny"
+rust_2018_idioms       = { level = "warn", priority = -1 }
+
+# One version of each dependency for the library and the demos. New
+# dependencies are added here as the demos need them.
+[workspace.dependencies]
+esp32-p4-function-ev = { path = "esp32-p4-function-ev" }
+
+# `unstable`: most ESP32-P4 drivers (I2S, SDMMC, Ethernet, MIPI-DSI, PSRAM,
+# DMA) are still behind esp-hal's unstable feature. Pinned with `~` because
+# unstable APIs may change in minor releases.
+esp-hal                = { version = "~1.2.2", features = ["esp32p4", "log-04", "unstable"] }
+esp-rtos               = { version = "0.4.0", features = ["embassy", "esp-alloc", "esp32p4", "log-04"] }
+esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32p4", "log-04"] }
+esp-alloc              = { version = "0.11.0", features = ["esp32p4"] }
+esp-backtrace          = { version = "0.20.0", features = ["esp32p4", "panic-handler", "println"] }
+# Default features: `auto` prints to the USB-Serial-JTAG when a host is
+# connected to it and to UART0 otherwise.
+esp-println            = { version = "0.18.0", features = ["esp32p4", "log-04"] }
+log                    = "0.4.27"
+embassy-executor       = { version = "0.10.0", features = ["log"] }
+embassy-time           = { version = "0.5.0", features = ["log"] }
+
+# For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
+[profile.dev]
+# The default debug profile is too slow and too big for resource-constrained devices.
+# Always build with some optimizations enabled.
+opt-level = "s"
+
+[profile.release]
+codegen-units = 1     # LLVM can perform better optimizations using a single thread
+debug         = 2     # prefer slower builds but better debugging experience
+lto           = 'fat'
+opt-level     = 's'
