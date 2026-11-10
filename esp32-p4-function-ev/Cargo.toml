@@ -19,12 +19,16 @@ default = []
 # firmware picks its own console and logger.
 log = ["dep:esp-println"]
 
-# Always built: the hardware-independent modules, which are unit-tested on a
+# Always built: the hardware-independent modules (level), which are unit-tested on a
 # PC: `cargo test -p esp32-p4-function-ev --lib --target <host triple>`.
 [dependencies]
 embassy-time = { workspace = true }
+libm         = { workspace = true }
 
 # The drivers, only for the ESP32-P4.
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 esp-hal     = { workspace = true }
+esp-alloc   = { workspace = true }
 esp-println = { workspace = true, optional = true }
+embedded-hal-async = { workspace = true }
+oxstack-drivers    = { workspace = true }

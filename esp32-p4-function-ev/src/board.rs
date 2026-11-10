@@ -17,7 +17,15 @@
 //! The touch controller on the LCD has neither its reset nor its interrupt
 //! line connected, so it is polled over I2C.
 
-use esp_hal::{Config, clock::CpuClock, peripherals::Peripherals};
+use esp_hal::{
+    Async, Config,
+    clock::CpuClock,
+    gpio::{Input, InputConfig, Pull},
+    i2c::master::{Config as I2cConfig, ConfigError, I2c, Instance as I2cInstance},
+    peripherals::{GPIO7, GPIO8, GPIO35, PSRAM, Peripherals},
+    psram::{Psram, PsramConfig},
+    time::Rate,
+};
 
 /// 7-bit addresses of the devices on the shared I2C bus (GPIO8 / GPIO7).
 pub mod i2c_addr {
@@ -39,8 +47,9 @@ pub mod i2c_addr {
 /// ```ignore
 /// let p = esp32_p4_function_ev::board::init();
 /// esp32_p4_function_ev::board::init_logger(); // with the `log` feature
-/// // Internal heap in the RAM the bootloader used:
+/// // Internal heap in the RAM the bootloader used, then PSRAM if wanted:
 /// esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: esp32_p4_function_ev::board::RECLAIMED_HEAP);
+/// esp32_p4_function_ev::board::psram_heap(p.PSRAM);
 /// ```
 ///
 /// The caller still has to start `esp_rtos` with a `TIMG0` timer and the
@@ -60,4 +69,49 @@ pub const RECLAIMED_HEAP: usize = 69_632;
 #[cfg(feature = "log")]
 pub fn init_logger() {
     esp_println::logger::init_logger_from_env();
+}
+
+/// Waits two seconds so a serial monitor started right after reset catches
+/// the first log lines. The USB-Serial-JTAG port drops off USB on every chip
+/// reset, and anything printed before the host reconnects is lost.
+pub async fn wait_for_console() {
+    embassy_time::Timer::after(embassy_time::Duration::from_secs(2)).await;
+}
+
+/// Initialises the 32 MB in-package hex (16-line) PSRAM with esp-hal's
+/// defaults: size detected from the chip, 250 MHz bus clock.
+pub fn psram(psram: PSRAM<'static>) -> Psram {
+    Psram::new(psram, PsramConfig::default())
+}
+
+/// Initialises PSRAM with [`psram`] and adds all of it to the heap, after any
+/// internal-RAM regions: allocations that don't fit into internal RAM then
+/// come from PSRAM. Call at most once. Returns the PSRAM size in bytes.
+pub fn psram_heap(psram: PSRAM<'static>) -> usize {
+    let psram = self::psram(psram);
+    let (_, size) = psram.raw_parts();
+    esp_alloc::psram_allocator!(&psram);
+    size
+}
+
+/// Creates the async I2C master for the shared bus (audio codec, touch).
+pub fn i2c<'d>(
+    i2c: impl I2cInstance + 'd,
+    scl: GPIO8<'d>,
+    sda: GPIO7<'d>,
+) -> Result<I2c<'d, Async>, ConfigError> {
+    let config = I2cConfig::default().with_frequency(Rate::from_khz(400));
+    Ok(I2c::new(i2c, config)?
+        .with_scl(scl)
+        .with_sda(sda)
+        .into_async())
+}
+
+/// The BOOT button (GPIO35), the only user button on the board. Reads low
+/// while pressed.
+///
+/// GPIO35 is a strapping pin: holding the button during reset enters the
+/// ROM download mode instead of starting the firmware.
+pub fn boot_button<'d>(pin: GPIO35<'d>) -> Input<'d> {
+    Input::new(pin, InputConfig::default().with_pull(Pull::Up))
 }
