@@ -32,3 +32,4 @@ esp-alloc   = { workspace = true }
 esp-println = { workspace = true, optional = true }
 embedded-hal-async = { workspace = true }
 oxstack-drivers    = { workspace = true }
+embedded-graphics  = { workspace = true }

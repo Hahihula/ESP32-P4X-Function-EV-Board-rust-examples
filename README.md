@@ -52,6 +52,7 @@ ESP32-P4.
 |------|----------|
 | `esp32-p4-function-ev/src/board.rs` | Board pin map, I2C device addresses, `init()`, logger, console wait, PSRAM heap, shared I2C bus, BOOT button |
 | `esp32-p4-function-ev/src/audio.rs` | I2S input stream from the ES8311 (DMA ring buffer that restarts itself after an overflow), ES8311 driver from `oxstack-drivers` |
+| `esp32-p4-function-ev/src/display.rs` | 7" LCD: EK79007 panel init over MIPI-DSI, triple-buffered video from PSRAM, `embedded-graphics` drawing target, backlight |
 | `esp32-p4-function-ev/src/level.rs` | RMS and peak levels in dBFS, text level bar (host-tested) |
 | `examples/src/demo.rs` | Start-up macro shared by the demos |
 
@@ -146,6 +147,43 @@ INFO - Recording at 32000 Hz, mic gain 30 dB. Speak, clap or whistle; press BOOT
 INFO -  -63.3 dBFS  peak  -53.5  |########......................|
 INFO -  -57.9 dBFS  peak  -48.8  |##########....................|
 ```
+
+### 02 – Display
+
+```bash
+cargo run --release --bin 02_display
+```
+
+Needs the LCD adapter board: the ribbon cable in the MIPI-DSI connector, jumper wires
+from header J1 GPIO27 to RST_LCD and GPIO26 to PWM, and power for the adapter (its USB
+port, or 5 V and GND from J1).
+
+Shows a test pattern for five seconds (eight colour bars, a 32-step grey ramp, a white
+border and a caption), then bounces a ball over it. Each frame redraws only the ball and
+the pattern where it was, not the whole 1.2 MB frame, and logs the frame rate:
+
+```text
+INFO - LCD on: 1024x600, RGB565
+INFO - Test pattern drawn in 35 ms
+INFO - 56.1 fps, 3902 us to draw a frame
+```
+
+esp-hal's MIPI-DSI driver streams a frame buffer from PSRAM to the panel by DMA, without
+the CPU. Two things in it shape `display.rs`:
+
+- **Exact timing.** The DSI host counts a line in lane byte clocks, the DPI bridge in
+  pixel clocks. If the two line lengths differ even by a fraction of a pixel after
+  rounding, the error adds up every line, the bridge FIFO overflows partway down the
+  screen, and the picture slants from there. The timing is therefore Espressif's with a
+  48 MHz pixel clock (240 MHz / 5, instead of 52) and a 150-pixel front porch (instead of
+  160): a 1344-pixel line is exactly 3150 byte clocks at 900 Mbit/s. The panel refreshes
+  at about 56 Hz.
+- **Three frame buffers.** A committed buffer reaches the DMA only at the end of the
+  next frame, so it appears two frames after `commit()`. With two buffers, the back
+  buffer would still be on screen while you draw into it.
+
+The backlight is on or off only: esp-hal has no PWM driver (LEDC or MCPWM) for the
+ESP32-P4 yet.
 
 ## License
 

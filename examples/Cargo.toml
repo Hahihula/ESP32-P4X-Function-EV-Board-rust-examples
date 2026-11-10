@@ -25,3 +25,4 @@ esp-println            = { workspace = true }
 log                    = { workspace = true }
 embassy-executor       = { workspace = true }
 embassy-time           = { workspace = true }
+embedded-graphics      = { workspace = true }
