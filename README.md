@@ -53,6 +53,7 @@ ESP32-P4.
 | `esp32-p4-function-ev/src/board.rs` | Board pin map, I2C device addresses, `init()`, logger, console wait, PSRAM heap, shared I2C bus, BOOT button |
 | `esp32-p4-function-ev/src/audio.rs` | I2S input stream from the ES8311 (DMA ring buffer that restarts itself after an overflow), ES8311 driver from `oxstack-drivers` |
 | `esp32-p4-function-ev/src/display.rs` | 7" LCD: EK79007 panel init over MIPI-DSI, triple-buffered video from PSRAM, `embedded-graphics` drawing target, backlight |
+| `esp32-p4-function-ev/src/sdcard.rs` | microSD card: SD host in 4-bit mode at 40 MHz, card driver from `sdio`, `embedded-sdmmc` block device for FAT16/FAT32 |
 | `esp32-p4-function-ev/src/touch.rs` | GT911 touch controller: polled async driver over the shared I2C bus, address detection, up to five fingers, orientation (host-tested) |
 | `esp32-p4-function-ev/src/level.rs` | RMS and peak levels in dBFS, text level bar (host-tested) |
 | `examples/src/demo.rs` | Start-up macro shared by the demos |
@@ -221,6 +222,52 @@ if let Some(touches) = touch.read().await? {
 Each frame is drawn into the oldest of the three frame buffers, so the demo keeps the
 strokes of the last three frames and paints all of them into every back buffer. That way
 each buffer gets every stroke it missed.
+
+### 04 – microSD card
+
+```bash
+cargo run --release --bin 04_sdcard
+```
+
+Needs a microSD card formatted FAT16 or FAT32 (cards up to 32 GB usually come that way;
+larger ones come as exFAT, which `embedded-sdmmc` can't read). The demo writes to the
+card, so use one without anything important on it. It:
+
+- identifies the card and switches it to the 4-bit bus at 40 MHz;
+- lists the root directory;
+- appends a line to `P4BOOT.TXT`, so the boot count goes up with every run;
+- writes a 1 MiB file, `P4BENCH.BIN`, reads it back, checks it and deletes it.
+
+```text
+INFO - Card: manufacturer 0x03, OEM "SD", product "SU32G" rev 8.0, serial 00E0214D, made 12/2013
+INFO - Capacity 29.7 GiB, SD spec V3, 4-bit bus at 40 MHz
+INFO - Root directory:
+INFO -            0  EMPTY
+INFO -        <DIR>  SPOTLI~1
+INFO - Appended to P4BOOT.TXT: Boot 2, 2175 ms after reset
+INFO - 1 MiB file: write 20469 ms (50 KiB/s), read 841 ms (1217 KiB/s)
+INFO - Read back 1048576 bytes, all match
+```
+
+The card and the slot's pins (GPIO39–44) are powered by the chip's internal LDO channel 4,
+which esp-hal switches on with the SD host. The slot has no card-detect switch, so a
+missing card shows up as a timeout on the first command.
+
+esp-hal's SD host plugs into embassy's `sdio` crate, which brings the card up and exposes
+it as an async block device. The file system is `embedded-sdmmc` (re-exported as
+`sdcard::embedded_sdmmc`), the established FAT crate, which is blocking: `SdCard` runs
+each block transfer to completion in place, briefly blocking the executor. The async
+alternative the `sdio` docs suggest, `embedded-fatfs`, has no release on crates.io yet.
+
+Writing is slow because `embedded-sdmmc` writes one 512-byte block at a time, and the card
+finishes programming each block before it takes the next. Reading reaches about 1.2 MB/s.
+
+```rust
+let host = sdcard::host(p.SDHOST)?;
+let card = SdCard::init(&host, esp32_p4_function_ev::sd_pins!(p)).await?;
+let fs = embedded_sdmmc::VolumeManager::new(card, my_time_source);
+let root = fs.open_volume(embedded_sdmmc::VolumeIdx(0))?.open_root_dir()?;
+```
 
 ## License
 

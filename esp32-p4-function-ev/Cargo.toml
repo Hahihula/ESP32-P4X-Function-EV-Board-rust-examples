@@ -33,3 +33,8 @@ esp-alloc   = { workspace = true }
 esp-println = { workspace = true, optional = true }
 oxstack-drivers    = { workspace = true }
 embedded-graphics  = { workspace = true }
+sdio                = { workspace = true }
+block-device-driver = { workspace = true }
+aligned             = { workspace = true }
+embassy-futures     = { workspace = true }
+embedded-sdmmc      = { workspace = true }

@@ -25,3 +25,5 @@ pub mod audio;
 pub mod board;
 #[cfg(target_arch = "riscv32")]
 pub mod display;
+#[cfg(target_arch = "riscv32")]
+pub mod sdcard;
