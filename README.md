@@ -53,6 +53,8 @@ ESP32-P4.
 | `esp32-p4-function-ev/src/board.rs` | Board pin map, I2C device addresses, `init()`, logger, console wait, PSRAM heap, shared I2C bus, BOOT button |
 | `esp32-p4-function-ev/src/audio.rs` | I2S input stream from the ES8311 (DMA ring buffer that restarts itself after an overflow), ES8311 driver from `oxstack-drivers` |
 | `esp32-p4-function-ev/src/display.rs` | 7" LCD: EK79007 panel init over MIPI-DSI, triple-buffered video from PSRAM, `embedded-graphics` drawing target, backlight |
+| `esp32-p4-function-ev/src/ethernet.rs` | 100 Mbit Ethernet: IP101 PHY reset, EMAC over RMII, `embassy-net` driver, fix for long frames on transmit |
+| `esp32-p4-function-ev/src/ntp.rs` | SNTP request and reply, Unix time to UTC date and time (host-tested) |
 | `esp32-p4-function-ev/src/sdcard.rs` | microSD card: SD host in 4-bit mode at 40 MHz, card driver from `sdio`, `embedded-sdmmc` block device for FAT16/FAT32 |
 | `esp32-p4-function-ev/src/touch.rs` | GT911 touch controller: polled async driver over the shared I2C bus, address detection, up to five fingers, orientation (host-tested) |
 | `esp32-p4-function-ev/src/level.rs` | RMS and peak levels in dBFS, text level bar (host-tested) |
@@ -268,6 +270,49 @@ let card = SdCard::init(&host, esp32_p4_function_ev::sd_pins!(p)).await?;
 let fs = embedded_sdmmc::VolumeManager::new(card, my_time_source);
 let root = fs.open_volume(embedded_sdmmc::VolumeIdx(0))?.open_root_dir()?;
 ```
+
+### 05 – Ethernet
+
+```bash
+cargo run --release --bin 05_ethernet
+```
+
+Needs a network cable to a network with a DHCP server (a home router). The demo brings
+up the port and `embassy-net`, gets an address by DHCP, sets its clock from
+`pool.ntp.org` and serves a status page on port 80. The board also answers ping.
+
+```text
+INFO - MAC address e8:f6:0a:e7:54:a2
+INFO - Waiting for the link (is the cable plugged in?)
+INFO - Link up, asking for an address by DHCP
+INFO - IP address 192.168.32.71/23, gateway Some(192.168.32.3), DNS [192.168.32.3]
+INFO - Time from pool.ntp.org: 2026-11-10 15:06:07 UTC
+INFO - Open http://192.168.32.71/ in a browser, or ping it
+INFO - "GET / HTTP/1.1" from Some(Endpoint { addr: Ipv4(192.168.33.161), port: 49203 }): 200 OK
+```
+
+On the test network DHCP took about 30 s after the link came up every time, which matches
+a switch port with spanning tree holding traffic back after a link change.
+
+The IP101 PHY takes its 50 MHz RMII clock from an oscillator on the board, which also
+feeds the ESP32-P4 on GPIO50. `EthernetPort::new` resets the PHY (GPIO51), starts the
+EMAC with the chip's factory MAC address and returns an `embassy-net` driver:
+
+```rust
+static DMA_STORAGE: StaticCell<ethernet::DmaStorage> = StaticCell::new();
+let port = EthernetPort::new(p.ETH, esp32_p4_function_ev::eth_pins!(p), DMA_STORAGE.init(ethernet::DmaStorage::new())).await?;
+let (stack, runner) = embassy_net::new(port, embassy_net::Config::dhcpv4(Default::default()), resources, seed);
+```
+
+GPIO35 is both the EMAC's TXD1 and the BOOT button: don't press BOOT while Ethernet runs.
+
+**Frames longer than 264 bytes.** With esp-hal 1.2 as it is, the board sends small
+frames fine but loses every frame longer than 264 bytes: ping works, DHCP and DNS work,
+but a web page never arrives. esp-hal runs the EMAC's transmit side in store-and-forward
+mode, which waits for the whole frame to be in the transmit FIFO, and on the ESP32-P4 that
+FIFO holds only about 256 bytes. `EthernetPort` switches transmit to threshold mode (start
+at 64 bytes), as esp-hal already does for receive. In that mode the EMAC can't insert IP,
+TCP and UDP checksums, so `EthernetPort` has `embassy-net` compute them on transmit.
 
 ## License
 

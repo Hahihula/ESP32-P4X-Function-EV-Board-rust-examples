@@ -26,3 +26,5 @@ log                    = { workspace = true }
 embassy-executor       = { workspace = true }
 embassy-time           = { workspace = true }
 embedded-graphics      = { workspace = true }
+embassy-net            = { workspace = true }
+static_cell            = { workspace = true }

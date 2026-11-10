@@ -43,6 +43,9 @@ block-device-driver = "0.2"
 aligned            = "0.4"
 embassy-futures    = "0.1"
 embedded-sdmmc     = { version = "0.10", default-features = false }
+embassy-net-driver = "0.2"
+embassy-net        = { version = "0.9", features = ["log", "medium-ethernet", "proto-ipv4", "dhcpv4", "dns", "tcp", "udp", "auto-icmp-echo-reply"] }
+static_cell        = "2"
 oxstack-drivers        = { version = "0.2.1", default-features = false, features = ["es8311"] }
 
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html

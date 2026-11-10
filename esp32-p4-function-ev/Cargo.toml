@@ -38,3 +38,4 @@ block-device-driver = { workspace = true }
 aligned             = { workspace = true }
 embassy-futures     = { workspace = true }
 embedded-sdmmc      = { workspace = true }
+embassy-net-driver  = { workspace = true }
