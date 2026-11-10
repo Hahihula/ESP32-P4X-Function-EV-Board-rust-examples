@@ -11,8 +11,26 @@
 //! sends in the left channel.
 //!
 //! [`AudioIn`] receives through a DMA ring buffer, which has to be drained
-//! often enough (see [`AudioIn::read`]).
+//! often enough (see [`AudioIn::read`]). If it isn't, the DMA stops; `read`
+//! notices and restarts the stream, losing the samples in between.
+//!
+//! # Keeping the ring drained
+//!
+//! The ring holds about 125 ms at 32 kHz. A reader on the thread-mode
+//! Embassy executor can't run while another task on that core runs without
+//! awaiting: a full-screen redraw of the LCD in PSRAM, or heavy computation.
+//! Put the reader on a higher-priority interrupt executor instead
+//! (`esp_rtos::embassy::InterruptExecutor`), which preempts those. Two
+//! things to keep in mind there:
+//!
+//! - [`AudioIn`] is not `Send` (esp-hal's async drivers aren't), so pass the
+//!   peripherals ([`I2sInPins`], `I2S0`, `DMA_CH0`, which are) to the task
+//!   and call [`AudioIn::new`] inside it.
+//! - Keep floating-point code out of interrupt-executor tasks: the interrupt
+//!   entry doesn't save the FPU registers, so float code there corrupts the
+//!   float state of whatever it preempted.
 
+use embassy_time::{Duration, with_timeout};
 use esp_hal::{
     Async,
     dma::DmaRxStreamBuf,
@@ -34,6 +52,11 @@ pub fn codec<I2C: embedded_hal_async::i2c::I2c>(i2c: I2C) -> Es8311<I2C> {
 const FRAME_BYTES: usize = 4;
 /// Size of the DMA ring buffer for recording: 128 ms at 32 kHz.
 const IN_RING_BYTES: usize = 16 * 1024;
+/// Size of one DMA descriptor's chunk of the ring.
+const IN_CHUNK_BYTES: usize = 1024;
+/// With no data for this long, the stream has stopped. A chunk fills every
+/// 2.7 ms (96 kHz) to 11.6 ms (22.05 kHz).
+const STALL_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// The I2S pins for recording. [`i2s_in_pins!`](crate::i2s_in_pins) fills
 /// it in from the peripherals.
@@ -66,9 +89,14 @@ pub enum Error {
     Config(esp_hal::i2s::master::ConfigError),
     /// Starting a transfer failed.
     I2s(I2sError),
-    /// The DMA stopped (the ring overflowed). The stream has been restarted;
-    /// the next call works again.
+    /// The DMA stopped (the ring overflowed) and reported an error. The
+    /// stream has been restarted; the next call works again.
     Dma(esp_hal::dma::DmaError),
+    /// No data for 100 ms: the DMA stopped without reporting an
+    /// error. It does that when the ring overflows again after a restart: it
+    /// runs off the end of its descriptor chain and waits. The stream has
+    /// been restarted; the next call works again.
+    Stalled,
     /// Restarting after a DMA error failed; the stream is gone.
     Stopped,
 }
@@ -109,7 +137,7 @@ impl<'d> AudioIn<'d> {
             .with_ws(pins.ws)
             .with_din(pins.din)
             .build();
-        let buf = dma_rx_stream_buffer!(IN_RING_BYTES, 1024);
+        let buf = dma_rx_stream_buffer!(IN_RING_BYTES, IN_CHUNK_BYTES);
         let transfer = rx.read(buf).map_err(|(e, _, _)| Error::I2s(e))?;
         Ok(Self {
             transfer: Some(transfer),
@@ -124,15 +152,23 @@ impl<'d> AudioIn<'d> {
     ///
     /// # Errors
     ///
-    /// If the ring overflowed, the DMA stops with an error. The stream is
-    /// then restarted and [`Error::Dma`] returned, so the caller can log
-    /// the gap; the next call records again. [`Error::Stopped`] if
-    /// restarting failed.
+    /// If the ring overflowed, the DMA stops, with an error
+    /// ([`Error::Dma`]) or without ([`Error::Stalled`], noticed after
+    /// 100 ms without data). Either way the stream is restarted
+    /// before returning, so the caller can log the gap and the next call
+    /// records again. [`Error::Stopped`] if restarting failed.
     pub async fn read(&mut self, mut sample: impl FnMut(i16)) -> Result<usize, Error> {
         let transfer = self.transfer.as_mut().ok_or(Error::Stopped)?;
-        if let Err(e) = transfer.wait_for_available_async().await {
-            self.restart()?;
-            return Err(Error::Dma(e));
+        match with_timeout(STALL_TIMEOUT, transfer.wait_for_available_async()).await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                self.restart()?;
+                return Err(Error::Dma(e));
+            }
+            Err(_) => {
+                self.restart()?;
+                return Err(Error::Stalled);
+            }
         }
         let transfer = self.transfer.as_mut().ok_or(Error::Stopped)?;
         // The ADC is in the left channel, the first sample of each frame.
