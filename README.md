@@ -51,7 +51,7 @@ ESP32-P4.
 | Path | Contents |
 |------|----------|
 | `esp32-p4-function-ev/src/board.rs` | Board pin map, I2C device addresses, `init()`, logger, console wait, PSRAM heap, shared I2C bus, BOOT button |
-| `esp32-p4-function-ev/src/audio.rs` | I2S input stream from the ES8311 (DMA ring buffer that restarts itself after an overflow), ES8311 driver from `oxstack-drivers` |
+| `esp32-p4-function-ev/src/audio.rs` | I2S input (`AudioIn`) and output (`AudioOut`) streams for the ES8311 (DMA ring buffer that restarts itself after an overflow), ES8311 driver from the `es8311-async` crate |
 | `esp32-p4-function-ev/src/display.rs` | 7" LCD: EK79007 panel init over MIPI-DSI, triple-buffered video from PSRAM, `embedded-graphics` drawing target, backlight |
 | `esp32-p4-function-ev/src/ethernet.rs` | 100 Mbit Ethernet: IP101 PHY reset, EMAC over RMII, `embassy-net` driver, fix for long frames on transmit |
 | `esp32-p4-function-ev/src/ntp.rs` | SNTP request and reply, Unix time to UTC date and time (host-tested) |
@@ -135,19 +135,17 @@ Records the on-board microphone through the ES8311 codec over I2S at 32 kHz and 
 its level ten times per second: RMS and peak in dBFS and a bar with one `#` per 3 dB
 above −90 dBFS. Speak, clap or whistle near the board.
 
-The microphone pre-amplifier starts at its maximum gain, 30 dB, as in Espressif's C
-driver. Each press of **BOOT** lowers it by 6 dB; after 0 dB it goes back to 30 dB.
-The ES8311 adds a further 24 dB digitally.
+The microphone pre-amplifier is fixed at 30 dB, as in Espressif's C driver. The ADC adds
+0-42 dB in 6 dB steps, starting at 24 dB. Each press of **BOOT** lowers it by 6 dB; after
+0 dB it goes back to 42 dB.
 
-The P4 is the I2S master. The codec runs as slave and derives its clocks from the bit
-clock, so it is initialised only after the I2S stream is running. For about half a
-second after that, while its ADC starts, the codec sends silence (−96 dBFS).
+The P4 is the I2S master and generates MCLK (256 × fs). The codec runs as slave from MCLK,
+so it is initialised only after the I2S stream is running.
 
-In a quiet room at 30 dB the meter shows about −60 dBFS; at 0 dB the noise floor drops
-by those 30 dB, to about −90 dBFS:
+Lower gain steps lower the noise floor and the speech level together:
 
 ```text
-INFO - Recording at 32000 Hz, mic gain 30 dB. Speak, clap or whistle; press BOOT for less gain.
+INFO - Recording at 32000 Hz, mic gain 24 dB. Speak, clap or whistle; press BOOT for less gain.
 INFO -  -63.3 dBFS  peak  -53.5  |########......................|
 INFO -  -57.9 dBFS  peak  -48.8  |##########....................|
 ```
@@ -313,6 +311,32 @@ mode, which waits for the whole frame to be in the transmit FIFO, and on the ESP
 FIFO holds only about 256 bytes. `EthernetPort` switches transmit to threshold mode (start
 at 64 bytes), as esp-hal already does for receive. In that mode the EMAC can't insert IP,
 TCP and UDP checksums, so `EthernetPort` has `embassy-net` compute them on transmit.
+
+### 06 – Speaker
+
+```bash
+cargo run --release --bin 06_speaker
+```
+
+Plays generated sound through the ES8311 DAC and the NS4150B amplifier:
+
+1. Starts I2S as master at 44.1 kHz, 16-bit stereo Philips, with MCLK (GPIO13) at
+   256 × fs, and streams silence.
+2. Reads the ES8311 chip ID (`83 11`), starts the codec (`init` powers up the DAC muted),
+   then sets the DAC volume to -20 dB and unmutes it.
+3. Switches the amplifier on (GPIO53) last, so the codec's power-up doesn't pop in the
+   speaker, and plays a chime.
+4. A small sine synthesiser with a 10 ms fade per note renders the tunes into the I2S
+   ring from a task.
+
+A **BOOT** press plays the next tune: scale, Ode to Joy, chime. Verified on a board.
+
+```text
+INFO - === Demo 06: speaker (ES8311, 44.1 kHz) ===
+INFO - ES8311 chip ID [83, 11]
+INFO - ES8311 DAC running, volume -20 dB
+INFO - BOOT = next tune (scale, Ode to Joy, chime)
+```
 
 ## License
 

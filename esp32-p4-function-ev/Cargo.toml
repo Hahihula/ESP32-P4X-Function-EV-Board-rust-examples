@@ -31,7 +31,7 @@ libm               = { workspace = true }
 esp-hal     = { workspace = true }
 esp-alloc   = { workspace = true }
 esp-println = { workspace = true, optional = true }
-oxstack-drivers    = { workspace = true }
+es8311-async       = { workspace = true }
 embedded-graphics  = { workspace = true }
 sdio                = { workspace = true }
 block-device-driver = { workspace = true }

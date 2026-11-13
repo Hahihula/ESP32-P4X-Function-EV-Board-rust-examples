@@ -743,6 +743,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
+name = "es8311-async"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72c32a4d9a1f50dad2f2b840f442f07576f11888777ea42340aeaa62c92bd231"
+dependencies = [
+ "embedded-hal-async",
+]
+
+[[package]]
 name = "esp-alloc"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1011,11 +1020,11 @@ dependencies = [
  "embedded-graphics",
  "embedded-hal-async",
  "embedded-sdmmc",
+ "es8311-async",
  "esp-alloc",
  "esp-hal",
  "esp-println",
  "libm",
- "oxstack-drivers",
  "sdio",
 ]
 
@@ -1025,6 +1034,7 @@ version = "0.1.0"
 dependencies = [
  "embassy-executor",
  "embassy-net",
+ "embassy-sync 0.8.0",
  "embassy-time",
  "embedded-graphics",
  "esp-alloc",
@@ -1034,6 +1044,7 @@ dependencies = [
  "esp-println",
  "esp-rtos",
  "esp32-p4-function-ev",
+ "libm",
  "log",
  "static_cell",
 ]
@@ -1477,16 +1488,6 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
-
-[[package]]
-name = "oxstack-drivers"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e770ba6c15457c98179d98d18f966c19ebdb5ee3db17a8418c06348390c59d6"
-dependencies = [
- "embedded-hal 1.0.0",
- "embedded-hal-async",
-]
 
 [[package]]
 name = "paste"

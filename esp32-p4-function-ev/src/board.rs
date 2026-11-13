@@ -20,9 +20,9 @@
 use esp_hal::{
     Async, Config,
     clock::CpuClock,
-    gpio::{Input, InputConfig, Pull},
+    gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull},
     i2c::master::{Config as I2cConfig, ConfigError, I2c, Instance as I2cInstance},
-    peripherals::{GPIO7, GPIO8, GPIO35, PSRAM, Peripherals},
+    peripherals::{GPIO7, GPIO8, GPIO35, GPIO53, PSRAM, Peripherals},
     psram::{Psram, PsramConfig},
     time::Rate,
 };
@@ -114,4 +114,11 @@ pub fn i2c<'d>(
 /// ROM download mode instead of starting the firmware.
 pub fn boot_button<'d>(pin: GPIO35<'d>) -> Input<'d> {
     Input::new(pin, InputConfig::default().with_pull(Pull::Up))
+}
+
+/// Switches the NS4150B speaker amplifier on (GPIO53, active high) for as
+/// long as the returned pin is kept. Enable it after the codec's DAC is
+/// running, so the codec's power-up doesn't pop in the speaker.
+pub fn speaker_amp_on(pin: GPIO53<'_>) -> Output<'_> {
+    Output::new(pin, Level::High, OutputConfig::default())
 }

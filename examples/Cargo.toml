@@ -25,6 +25,8 @@ esp-println            = { workspace = true }
 log                    = { workspace = true }
 embassy-executor       = { workspace = true }
 embassy-time           = { workspace = true }
+embassy-sync           = { workspace = true }
+libm                   = { workspace = true }
 embedded-graphics      = { workspace = true }
 embassy-net            = { workspace = true }
 static_cell            = { workspace = true }
