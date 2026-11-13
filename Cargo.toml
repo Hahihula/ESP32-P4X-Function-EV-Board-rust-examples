@@ -48,6 +48,7 @@ embassy-net-driver = "0.2"
 embassy-net        = { version = "0.9", features = ["log", "medium-ethernet", "proto-ipv4", "dhcpv4", "dns", "tcp", "udp", "auto-icmp-echo-reply"] }
 static_cell        = "2"
 es8311-async       = "0.1"
+gt911              = "0.3"
 
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.dev]

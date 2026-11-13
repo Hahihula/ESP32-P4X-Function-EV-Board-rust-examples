@@ -1,9 +1,9 @@
 //! Demo 03: touch screen finger painting.
 //!
-//! Finds the GT911 touch controller, then polls it once per frame and paints
-//! a line behind every finger (up to five), each finger in its own colour.
-//! BOOT clears the canvas. Finger down and up events are logged with their
-//! position.
+//! Finds the GT911 touch controller (the `gt911` crate), then polls it once
+//! per frame and paints a line behind every finger (up to five), each finger
+//! in its own colour. BOOT clears the canvas. Finger down and up events are
+//! logged with their position.
 
 #![no_std]
 #![no_main]
@@ -28,7 +28,10 @@ use esp_backtrace as _;
 use esp32_p4_function_ev::{
     board,
     display::{self, Display, FRAME_BUFFERS},
-    touch::{Gt911, LCD_ORIENTATION, MAX_POINTS, Touches},
+    touch::{
+        self, MAX_POINTS,
+        gt911::{Error as TouchError, GET_MULTITOUCH_BUF_SIZE, Point as TouchPoint},
+    },
 };
 use log::{info, warn};
 
@@ -77,17 +80,10 @@ async fn main(_spawner: Spawner) -> ! {
     .await
     .unwrap();
 
-    let i2c = board::i2c(p.I2C0, p.GPIO8, p.GPIO7).unwrap();
-    let (touch, touch_info) = Gt911::find(i2c).await.unwrap();
-    let mut touch = touch.with_orientation(LCD_ORIENTATION);
-    info!(
-        "GT911 at 0x{:02X}: product ID {}, firmware {:04X}, {}x{}",
-        touch_info.address,
-        touch_info.product_id_str(),
-        touch_info.firmware,
-        touch_info.width,
-        touch_info.height
-    );
+    let mut i2c = board::i2c(p.I2C0, p.GPIO8, p.GPIO7).unwrap();
+    let (touch, address) = touch::find(&mut i2c).await.unwrap();
+    info!("GT911 at 0x{address:02X}");
+    let mut touch_buf = [0u8; GET_MULTITOUCH_BUF_SIZE];
     info!("Draw with up to {MAX_POINTS} fingers; press BOOT to clear");
 
     let boot = board::boot_button(p.GPIO35);
@@ -113,11 +109,10 @@ async fn main(_spawner: Spawner) -> ! {
         boot_was_pressed = boot_pressed;
 
         let mut strokes: FrameStrokes = [None; MAX_POINTS];
-        match touch.read().await {
-            Ok(Some(touches)) => {
-                strokes = track(&touches, &mut last);
-            }
-            Ok(None) => {}
+        match touch.get_multi_touch(&mut i2c, &mut touch_buf).await {
+            Ok(points) => strokes = track(&points, &mut last),
+            // No new scan since the last poll.
+            Err(TouchError::NotReady) => {}
             Err(e) => warn!("Touch read failed: {e:?}"),
         }
         recent.rotate_left(1);
@@ -143,14 +138,16 @@ async fn main(_spawner: Spawner) -> ! {
     clippy::large_stack_frames,
     reason = "the two log calls inline their formatting machinery; called from main only"
 )]
-fn track(touches: &Touches, last: &mut [Option<Point>; MAX_POINTS]) -> FrameStrokes {
+fn track(touches: &[TouchPoint], last: &mut [Option<Point>; MAX_POINTS]) -> FrameStrokes {
     let mut strokes = [None; MAX_POINTS];
     let mut now: [Option<Point>; MAX_POINTS] = [None; MAX_POINTS];
-    for t in touches.iter() {
-        let slot = usize::from(t.id) % MAX_POINTS;
-        let to = Point::new(i32::from(t.x), i32::from(t.y));
+    for t in touches {
+        let slot = usize::from(t.track_id) % MAX_POINTS;
+        // The touch panel is rotated by 180° relative to the display.
+        let (x, y) = touch::lcd_point(t.x, t.y);
+        let to = Point::new(i32::from(x), i32::from(y));
         let from = last[slot].unwrap_or_else(|| {
-            info!("Finger {} down at ({}, {})", t.id, t.x, t.y);
+            info!("Finger {} down at ({}, {})", t.track_id, x, y);
             to
         });
         now[slot] = Some(to);

@@ -198,24 +198,27 @@ draws a line in its own colour. **BOOT** clears the canvas. Fingers touching dow
 lifting are logged:
 
 ```text
-INFO - GT911 at 0x5D: product ID 911, firmware 1060, 1024x600
+INFO - GT911 at 0x5D
 INFO - Draw with up to 5 fingers; press BOOT to clear
 INFO - Finger 0 down at (370, 228)
 INFO - Finger 0 up at (447, 123)
 ```
 
-The GT911's INT and RESET pins are not wired to the ESP32-P4, so the driver polls it, here
-once per frame. Without the reset sequence the GT911 keeps whichever address it chose at
-power-up, 0x5D or 0x14; `Gt911::find` tries both.
+The GT911 driver is the [`gt911`](https://crates.io/crates/gt911) crate (async, stateless:
+the bus is passed to every call). The GT911's INT and RESET pins are not wired to the
+ESP32-P4, so the demo polls it, here once per frame. Without the reset sequence the GT911
+keeps whichever address it chose at power-up, 0x5D or 0x14; `touch::find` tries both.
 
 The touch panel is mounted rotated by 180° relative to the display: the GT911 reports
-(0, 0) at the bottom right corner of the picture. `touch::LCD_ORIENTATION` flips both axes:
+(0, 0) at the bottom right corner of the picture. `touch::lcd_point` flips both axes:
 
 ```rust
-let (touch, info) = Gt911::find(i2c).await?;
-let mut touch = touch.with_orientation(touch::LCD_ORIENTATION);
-if let Some(touches) = touch.read().await? {
-    for t in touches.iter() { /* t.id, t.x, t.y */ }
+let (touch, address) = touch::find(&mut i2c).await?;
+let mut buf = [0u8; gt911::GET_MULTITOUCH_BUF_SIZE];
+match touch.get_multi_touch(&mut i2c, &mut buf).await {
+    Ok(points) => for p in &points { let (x, y) = touch::lcd_point(p.x, p.y); /* p.track_id */ },
+    Err(gt911::Error::NotReady) => {} // no new scan since the last poll
+    Err(e) => { /* I2C failure */ }
 }
 ```
 

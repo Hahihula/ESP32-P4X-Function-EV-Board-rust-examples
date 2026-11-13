@@ -25,6 +25,7 @@ log = ["dep:esp-println"]
 embassy-time       = { workspace = true }
 embedded-hal-async = { workspace = true }
 libm               = { workspace = true }
+gt911              = { workspace = true }
 
 # The drivers, only for the ESP32-P4.
 [target.'cfg(target_arch = "riscv32")'.dependencies]
