@@ -1,7 +1,7 @@
 //! Demo 05: Ethernet.
 //!
 //! Brings up the Ethernet port and `embassy-net`, gets an address by DHCP,
-//! sets the clock from `pool.ntp.org` (SNTP), then serves a status page over
+//! sets the clock from `pool.ntp.org` (SNTP, with the `sntpc` crate), then serves a status page over
 //! HTTP on port 80. The board also answers ping.
 
 #![no_std]
@@ -15,6 +15,8 @@
 
 extern crate alloc;
 
+use core::net::{IpAddr, SocketAddr};
+
 use embassy_executor::Spawner;
 use embassy_net::{
     Config, IpAddress, Runner, Stack, StackResources,
@@ -27,9 +29,12 @@ use esp_backtrace as _;
 use esp_hal::rng::Rng;
 use esp32_p4_function_ev::{
     ethernet::{self, DmaStorage, EthernetPort},
-    ntp::{self, DateTime},
+    time::DateTime,
 };
 use log::{info, warn};
+use sntpc::NtpContext;
+use sntpc_net_embassy::UdpSocketWrapper;
+use sntpc_time_embassy::EmbassyTimestampGenerator;
 use static_cell::StaticCell;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -103,7 +108,7 @@ async fn main(spawner: Spawner) -> ! {
             Some(clock)
         }
         Err(e) => {
-            warn!("SNTP failed: {e}");
+            warn!("SNTP failed: {e:?}");
             None
         }
     };
@@ -120,37 +125,46 @@ async fn net_task(mut runner: Runner<'static, EthernetPort<'static>>) -> ! {
     runner.run().await
 }
 
+/// Why [`sntp`] failed.
+#[derive(Debug)]
+#[allow(dead_code, reason = "the payload is shown by the Debug output")]
+enum SntpError {
+    Dns,
+    Socket,
+    Timeout,
+    Ntp(sntpc::Error),
+}
+
 /// Asks the NTP pool for the time.
 #[allow(
     clippy::large_stack_frames,
     reason = "the UDP socket buffers live here; awaited once from main"
 )]
-async fn sntp(stack: Stack<'_>) -> Result<Clock, &'static str> {
+async fn sntp(stack: Stack<'_>) -> Result<Clock, SntpError> {
     let addresses = stack
         .dns_query(NTP_SERVER, DnsQueryType::A)
         .await
-        .map_err(|_| "DNS lookup failed")?;
-    let server: IpAddress = *addresses.first().ok_or("no DNS answer")?;
+        .map_err(|_| SntpError::Dns)?;
+    let Some(IpAddress::Ipv4(server)) = addresses.first().copied() else {
+        return Err(SntpError::Dns);
+    };
 
     let mut rx_meta = [PacketMetadata::EMPTY; 1];
     let mut tx_meta = [PacketMetadata::EMPTY; 1];
     let mut rx_buf = [0u8; 128];
     let mut tx_buf = [0u8; 128];
     let mut socket = UdpSocket::new(stack, &mut rx_meta, &mut rx_buf, &mut tx_meta, &mut tx_buf);
-    socket.bind(0).map_err(|_| "UDP bind failed")?;
-    socket
-        .send_to(&ntp::request(), (server, ntp::PORT))
-        .await
-        .map_err(|_| "UDP send failed")?;
+    socket.bind(0).map_err(|_| SntpError::Socket)?;
+    let socket = UdpSocketWrapper::from(socket);
 
-    let mut reply = [0u8; ntp::PACKET_LEN];
-    let (len, _) = with_timeout(NTP_TIMEOUT, socket.recv_from(&mut reply))
+    let context = NtpContext::new(EmbassyTimestampGenerator::default());
+    let request = sntpc::get_time(SocketAddr::new(IpAddr::V4(server), 123), &socket, context);
+    let time = with_timeout(NTP_TIMEOUT, request)
         .await
-        .map_err(|_| "no reply")?
-        .map_err(|_| "UDP receive failed")?;
-    let unix = ntp::parse_response(&reply[..len]).ok_or("bad reply")?;
+        .map_err(|_| SntpError::Timeout)?
+        .map_err(SntpError::Ntp)?;
     Ok(Clock {
-        unix,
+        unix: time.sec(),
         at: Instant::now(),
     })
 }

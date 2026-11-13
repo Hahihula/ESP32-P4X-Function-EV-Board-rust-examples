@@ -29,4 +29,7 @@ embassy-sync           = { workspace = true }
 libm                   = { workspace = true }
 embedded-graphics      = { workspace = true }
 embassy-net            = { workspace = true }
+sntpc                  = { workspace = true }
+sntpc-net-embassy      = { workspace = true }
+sntpc-time-embassy     = { workspace = true }
 static_cell            = { workspace = true }

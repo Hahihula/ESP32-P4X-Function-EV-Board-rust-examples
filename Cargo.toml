@@ -45,6 +45,9 @@ aligned            = "0.4"
 embassy-futures    = "0.1"
 embedded-sdmmc     = { version = "0.10", default-features = false }
 embassy-net-driver = "0.2"
+sntpc              = { version = "0.11", default-features = false }
+sntpc-net-embassy  = "0.11"
+sntpc-time-embassy = "0.6"
 embassy-net        = { version = "0.9", features = ["log", "medium-ethernet", "proto-ipv4", "dhcpv4", "dns", "tcp", "udp", "auto-icmp-echo-reply"] }
 static_cell        = "2"
 es8311-async       = "0.1"

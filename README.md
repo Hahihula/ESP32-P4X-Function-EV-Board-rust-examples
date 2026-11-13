@@ -54,7 +54,7 @@ ESP32-P4.
 | `esp32-p4-function-ev/src/audio.rs` | I2S input (`AudioIn`) and output (`AudioOut`) streams for the ES8311 (DMA ring buffer that restarts itself after an overflow), ES8311 driver from the `es8311-async` crate |
 | `esp32-p4-function-ev/src/display.rs` | 7" LCD: EK79007 panel init over MIPI-DSI, triple-buffered video from PSRAM, `embedded-graphics` drawing target, backlight |
 | `esp32-p4-function-ev/src/ethernet.rs` | 100 Mbit Ethernet: IP101 PHY reset, EMAC over RMII, `embassy-net` driver, fix for long frames on transmit |
-| `esp32-p4-function-ev/src/ntp.rs` | SNTP request and reply, Unix time to UTC date and time (host-tested) |
+| `esp32-p4-function-ev/src/time.rs` | Unix time to UTC date and time (host-tested) |
 | `esp32-p4-function-ev/src/sdcard.rs` | microSD card: SD host in 4-bit mode at 40 MHz, card driver from `sdio`, `embedded-sdmmc` block device for FAT16/FAT32 |
 | `esp32-p4-function-ev/src/touch.rs` | GT911 touch controller: polled async driver over the shared I2C bus, address detection, up to five fingers, orientation (host-tested) |
 | `esp32-p4-function-ev/src/level.rs` | RMS and peak levels in dBFS, text level bar (host-tested) |
@@ -280,7 +280,7 @@ cargo run --release --bin 05_ethernet
 
 Needs a network cable to a network with a DHCP server (a home router). The demo brings
 up the port and `embassy-net`, gets an address by DHCP, sets its clock from
-`pool.ntp.org` and serves a status page on port 80. The board also answers ping.
+`pool.ntp.org` (with the [`sntpc`](https://crates.io/crates/sntpc) crate) and serves a status page on port 80. The board also answers ping.
 
 ```text
 INFO - MAC address e8:f6:0a:e7:54:a2
